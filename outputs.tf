@@ -8,14 +8,19 @@ output "storage_account_name" {
   value       = azurerm_storage_account.siyuan.name
 }
 
-output "azure_openai_endpoint" {
-  description = "Azure OpenAI endpoint URL (use this in SiYuan AI settings)"
-  value       = azurerm_cognitive_account.openai.endpoint
+output "foundry_serverless_endpoint" {
+  description = "Azure AI Foundry serverless endpoint URI"
+  value       = var.serverless_endpoint_uri
 }
 
-output "azure_openai_deployment" {
-  description = "Azure OpenAI deployment name (use this as the Model in SiYuan AI settings)"
-  value       = azurerm_cognitive_deployment.model.name
+output "foundry_workspace_id" {
+  description = "Azure AI Foundry workspace resource ID"
+  value       = azurerm_machine_learning_workspace.foundry.id
+}
+
+output "foundry_serverless_model" {
+  description = "Azure AI Foundry serverless model ID"
+  value       = var.serverless_model_id
 }
 
 output "resource_group_name" {

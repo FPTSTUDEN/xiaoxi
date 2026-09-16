@@ -5,12 +5,20 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
+    azapi = {
+      source  = "Azure/azapi"
+      version = "~> 2.0"
+    }
   }
 }
 
 provider "azurerm" {
   features {}
 }
+
+provider "azapi" {}
+
+data "azurerm_client_config" "current" {}
 
 # ============================================================
 # RESOURCE GROUP
@@ -31,7 +39,7 @@ resource "azurerm_storage_account" "siyuan" {
   account_replication_type = "LRS"
   account_kind             = "StorageV2"
   access_tier              = "Hot"
-#   enable_https_traffic_only = true
+  #   enable_https_traffic_only = true
 
   # Required for large file share (up to 100 TiB) [citation:3]
   large_file_share_enabled = true
@@ -46,6 +54,45 @@ resource "azurerm_storage_share" "siyuan_workspace" {
   quota              = 10 # GB
 
   access_tier = "Cool" # Cost-effective for infrequent access
+}
+
+# ============================================================
+# AZURE AI FOUNDRY WORKSPACE DEPENDENCIES
+# ============================================================
+resource "azurerm_key_vault" "foundry" {
+  name                       = "${var.project_name}-kv"
+  location                   = azurerm_resource_group.siyuan.location
+  resource_group_name        = azurerm_resource_group.siyuan.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  soft_delete_retention_days = 7
+  purge_protection_enabled   = false
+  rbac_authorization_enabled = true
+  tags                       = var.tags
+}
+
+resource "azurerm_application_insights" "foundry" {
+  name                = "${var.project_name}-foundry-ai"
+  location            = azurerm_resource_group.siyuan.location
+  resource_group_name = azurerm_resource_group.siyuan.name
+  application_type    = "web"
+  retention_in_days   = 30
+  tags                = var.tags
+}
+
+resource "azurerm_machine_learning_workspace" "foundry" {
+  name                          = "${var.project_name}-foundry"
+  location                      = azurerm_resource_group.siyuan.location
+  resource_group_name           = azurerm_resource_group.siyuan.name
+  application_insights_id       = azurerm_application_insights.foundry.id
+  key_vault_id                  = azurerm_key_vault.foundry.id
+  storage_account_id            = azurerm_storage_account.siyuan.id
+  sku_name                      = "Basic"
+  public_network_access_enabled = true
+  identity {
+    type = "SystemAssigned"
+  }
+  tags = var.tags
 }
 
 # ============================================================
@@ -73,7 +120,7 @@ resource "azurerm_container_app_environment" "siyuan" {
     name                  = "Consumption"
     workload_profile_type = "Consumption"
   }
-  
+
 
   tags = var.tags
 }
@@ -91,37 +138,25 @@ resource "azurerm_container_app_environment_storage" "siyuan" {
 }
 
 # ============================================================
-# AZURE OPENAI (AI Backend)
+# AZURE AI FOUNDRY SERVERLESS MODEL ENDPOINT
 # ============================================================
-resource "azurerm_cognitive_account" "openai" {
-  name                = "${var.project_name}-openai"
-  location            = azurerm_resource_group.siyuan.location
-  resource_group_name = azurerm_resource_group.siyuan.name
-  kind                = "OpenAI"
-  sku_name            = "S0"
-  custom_subdomain_name = var.project_name
+resource "azapi_resource" "serverless_endpoint" {
+  type      = "Microsoft.MachineLearningServices/workspaces/serverlessEndpoints@2024-04-01"
+  name      = var.serverless_endpoint_name
+  parent_id = azurerm_machine_learning_workspace.foundry.id
+  location  = azurerm_resource_group.siyuan.location
+  tags      = var.tags
 
-  tags = var.tags
-}
-
-# Model deployment (e.g., gpt-4o-mini)
-resource "azurerm_cognitive_deployment" "model" {
-  name                 = var.openai_deployment_name
-  cognitive_account_id = azurerm_cognitive_account.openai.id
-
-  model {
-    format  = var.openai_model_format
-    name    = var.openai_model_name
-    version = var.openai_model_version
-  }
-
-#   scale {
-#     type     = "Standard"
-#     capacity = var.openai_capacity
-#   }
-  sku {
-    name = "Standard"
-    capacity = var.openai_capacity
+  body = {
+    properties = {
+      authMode = "Key"
+      modelSettings = {
+        modelId = var.serverless_model_id
+      }
+    }
+    sku = {
+      name = "Standard"
+    }
   }
 }
 
@@ -134,15 +169,15 @@ resource "azurerm_container_app" "siyuan" {
   resource_group_name          = azurerm_resource_group.siyuan.name
   revision_mode                = "Single"
 
-  # Secrets for auth code and OpenAI key [citation:5]
+  # Secrets for auth code and Foundry serverless endpoint key.
   secret {
     name  = "siyuan-auth-code"
     value = var.siyuan_auth_code
   }
 
   secret {
-    name  = "azure-openai-key"
-    value = azurerm_cognitive_account.openai.primary_access_key
+    name  = "foundry-endpoint-key"
+    value = var.serverless_endpoint_key
   }
 
   # Ingress configuration
@@ -200,25 +235,20 @@ resource "azurerm_container_app" "siyuan" {
         value = var.timezone
       }
 
-      # AI configuration (for reference in SiYuan settings)
+      # Azure AI Foundry serverless endpoint configuration.
       env {
-        name  = "AZURE_OPENAI_ENDPOINT"
-        value = azurerm_cognitive_account.openai.endpoint
+        name  = "AZURE_AI_ENDPOINT"
+        value = var.serverless_endpoint_uri
       }
 
       env {
-        name        = "AZURE_OPENAI_API_KEY"
-        secret_name = "azure-openai-key"
+        name        = "AZURE_AI_API_KEY"
+        secret_name = "foundry-endpoint-key"
       }
 
       env {
-        name  = "AZURE_OPENAI_DEPLOYMENT"
-        value = azurerm_cognitive_deployment.model.name
-      }
-
-      env {
-        name  = "AZURE_OPENAI_MODEL"
-        value = var.openai_model_name
+        name  = "AZURE_AI_MODEL"
+        value = var.serverless_model_id
       }
     }
   }
@@ -227,6 +257,6 @@ resource "azurerm_container_app" "siyuan" {
 
   depends_on = [
     azurerm_container_app_environment_storage.siyuan,
-    azurerm_cognitive_deployment.model
+    azapi_resource.serverless_endpoint
   ]
 }

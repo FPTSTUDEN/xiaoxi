@@ -57,35 +57,28 @@ variable "max_replicas" {
   default     = 1
 }
 
-# Azure OpenAI variables
-variable "openai_deployment_name" {
-  description = "Name of the model deployment"
+# Azure AI Foundry serverless endpoint variables
+variable "serverless_endpoint_name" {
+  description = "Name of the Foundry serverless endpoint"
   type        = string
-  default     = "gpt-4o-mini"
+  default     = "deepseek-endpoint"
 }
 
-variable "openai_model_name" {
-  description = "OpenAI model name"
+variable "serverless_model_id" {
+  description = "Azure AI Foundry model catalog ID"
   type        = string
-  default     = "gpt-4o-mini"
+  default     = "DeepSeek-V3-0324"
 }
 
-variable "openai_model_format" {
-  description = "OpenAI model format"
+variable "serverless_endpoint_uri" {
+  description = "Inference URI shown by Azure AI Foundry for the serverless endpoint"
   type        = string
-  default     = "OpenAI"
 }
 
-variable "openai_model_version" {
-  description = "OpenAI model version"
+variable "serverless_endpoint_key" {
+  description = "Key shown by Azure AI Foundry for the serverless endpoint"
   type        = string
-  default     = "2024-07-18"
-}
-
-variable "openai_capacity" {
-  description = "OpenAI deployment capacity (thousands of tokens per minute)"
-  type        = number
-  default     = 10
+  sensitive   = true
 }
 
 variable "tags" {
