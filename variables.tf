@@ -70,6 +70,12 @@ variable "openai_model_name" {
   default     = "gpt-4o-mini"
 }
 
+variable "openai_model_format" {
+  description = "OpenAI model format"
+  type        = string
+  default     = "OpenAI"
+}
+
 variable "openai_model_version" {
   description = "OpenAI model version"
   type        = string

@@ -44,6 +44,8 @@ resource "azurerm_storage_share" "siyuan_workspace" {
   name               = "siyuan-workspace"
   storage_account_id = azurerm_storage_account.siyuan.id
   quota              = 10 # GB
+
+  access_tier = "Cool" # Cost-effective for infrequent access
 }
 
 # ============================================================
@@ -66,6 +68,12 @@ resource "azurerm_container_app_environment" "siyuan" {
   location                   = azurerm_resource_group.siyuan.location
   resource_group_name        = azurerm_resource_group.siyuan.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.siyuan.id
+
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
+  
 
   tags = var.tags
 }
@@ -102,7 +110,7 @@ resource "azurerm_cognitive_deployment" "model" {
   cognitive_account_id = azurerm_cognitive_account.openai.id
 
   model {
-    format  = "OpenAI"
+    format  = var.openai_model_format
     name    = var.openai_model_name
     version = var.openai_model_version
   }
