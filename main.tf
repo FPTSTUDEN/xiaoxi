@@ -165,7 +165,8 @@ resource "azurerm_cognitive_deployment" "model" {
 #     capacity = var.openai_capacity
 #   }
   sku {
-    name = "Standard"
+    name = "GlobalStandard"
+    # tier = "Standard"
     capacity = var.openai_capacity
   }
 }
