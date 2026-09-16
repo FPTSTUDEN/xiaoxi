@@ -220,9 +220,8 @@ resource "azurerm_container_app" "siyuan" {
       cpu    = var.container_cpu
       memory = var.container_memory
 
-      # Command to start SiYuan server (required since v3.7.0)
-      command = ["serve"]
-      args    = ["--workspace=/siyuan/workspace/", "--accessAuthCode=${var.siyuan_auth_code}"]
+      # The image entrypoint invokes the kernel, so pass its command and flags.
+      args    = ["serve", "--workspace=/siyuan/workspace/"]
 
       # Volume mount
       volume_mounts {
@@ -239,6 +238,11 @@ resource "azurerm_container_app" "siyuan" {
       env {
         name  = "PGID"
         value = "1000"
+      }
+
+      env {
+        name        = "SIYUAN_ACCESS_AUTH_CODE"
+        secret_name = "siyuan-auth-code"
       }
 
       env {
