@@ -10,7 +10,7 @@ output "storage_account_name" {
 
 output "foundry_serverless_endpoint" {
   description = "Azure AI Foundry serverless endpoint URI"
-  value       = var.serverless_endpoint_uri
+  value       = jsondecode(azapi_resource.serverless_endpoint.output).properties.inferenceEndpoint.uri
 }
 
 output "foundry_workspace_id" {

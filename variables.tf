@@ -70,17 +70,6 @@ variable "serverless_model_id" {
   default     = "DeepSeek-V3-0324"
 }
 
-variable "serverless_endpoint_uri" {
-  description = "Inference URI shown by Azure AI Foundry for the serverless endpoint"
-  type        = string
-}
-
-variable "serverless_endpoint_key" {
-  description = "Key shown by Azure AI Foundry for the serverless endpoint"
-  type        = string
-  sensitive   = true
-}
-
 variable "tags" {
   description = "Tags for all resources"
   type        = map(string)

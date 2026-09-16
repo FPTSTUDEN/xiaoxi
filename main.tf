@@ -160,6 +160,14 @@ resource "azapi_resource" "serverless_endpoint" {
   }
 }
 
+resource "azapi_resource_action" "serverless_endpoint_keys" {
+  type                   = "Microsoft.MachineLearningServices/workspaces/serverlessEndpoints@2024-04-01"
+  resource_id            = azapi_resource.serverless_endpoint.id
+  action                 = "listKeys"
+  method                 = "POST"
+  response_export_values = ["primaryKey"]
+}
+
 # ============================================================
 # CONTAINER APP (SiYuan)
 # ============================================================
@@ -177,7 +185,7 @@ resource "azurerm_container_app" "siyuan" {
 
   secret {
     name  = "foundry-endpoint-key"
-    value = var.serverless_endpoint_key
+    value = jsondecode(azapi_resource_action.serverless_endpoint_keys.output).primaryKey
   }
 
   # Ingress configuration
@@ -238,7 +246,7 @@ resource "azurerm_container_app" "siyuan" {
       # Azure AI Foundry serverless endpoint configuration.
       env {
         name  = "AZURE_AI_ENDPOINT"
-        value = var.serverless_endpoint_uri
+        value = jsondecode(azapi_resource.serverless_endpoint.output).properties.inferenceEndpoint.uri
       }
 
       env {

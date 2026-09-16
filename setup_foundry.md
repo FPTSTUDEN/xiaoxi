@@ -8,46 +8,23 @@ serverless_model_id = "DeepSeek-V3-0324"
 
 Use the exact model ID shown in Azure AI Foundry for your region. Add it to `terraform.tfvars` if needed.
 
-**2. Create the Foundry resources first**
+**2. Set the SiYuan password**
 
-From the project directory:
-
-```powershell
-terraform apply "-target=azurerm_machine_learning_workspace.foundry" "-target=azapi_resource.serverless_endpoint"
-```
-
-Terraform will also create the required Key Vault, Application Insights, and storage dependencies.
-
-**3. Retrieve the endpoint details**
-
-After creation, open Azure AI Foundry:
-
-1. Go to **Build** or **Model catalog**.
-2. Open the deployed serverless endpoint.
-3. Copy its **Inference URI**.
-4. Copy or regenerate its **API key**.
-
-Then update `terraform.tfvars`:
+Update `terraform.tfvars`:
 
 ```hcl
-serverless_endpoint_uri = "https://..."
-serverless_endpoint_key = "your-key"
-siyuan_auth_code         = "your-siyuan-password"
+siyuan_auth_code = "your-siyuan-password"
 ```
 
-Do not commit the key to Git. Prefer setting it temporarily through an environment variable:
+The endpoint URI and API key are fetched automatically by Terraform. The key is stored in Terraform state and passed to the Container App as a secret, so protect `terraform.tfstate` and do not commit it.
 
-```powershell
-$env:TF_VAR_serverless_endpoint_key = "your-key"
-```
-
-**4. Run the full plan**
+**3. Run the full plan**
 
 ```powershell
 terraform plan -out=tfplan
 ```
 
-Review it carefully. Your current state includes the old Azure OpenAI Cognitive Account, so the full plan will try to destroy it. It also currently plans to replace the Container Apps environment because of the workload profile change.
+Review it carefully. Your current state includes the old Azure OpenAI Cognitive Account, so the full plan will try to destroy it. It may also replace the Container Apps environment because of the workload profile change.
 
 If the plan is acceptable:
 
@@ -61,4 +38,4 @@ Finally, retrieve the SiYuan URL:
 terraform output -raw siyuan_url
 ```
 
-The endpoint itself is Terraform-managed; only the endpoint URI/key retrieval is currently manual in this configuration.
+The Foundry workspace, serverless endpoint, endpoint URI, and endpoint key are all Terraform-managed.
