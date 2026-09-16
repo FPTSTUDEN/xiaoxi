@@ -70,6 +70,12 @@ variable "serverless_model_id" {
   default     = "DeepSeek-V3-0324"
 }
 
+variable "serverless_sku_name" {
+  description = "Azure AI Foundry serverless deployment SKU code"
+  type        = string
+  default     = "Consumption"
+}
+
 variable "tags" {
   description = "Tags for all resources"
   type        = map(string)

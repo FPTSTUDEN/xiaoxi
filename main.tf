@@ -108,6 +108,35 @@ resource "azurerm_log_analytics_workspace" "siyuan" {
 }
 
 # ============================================================
+# CONTAINER APPS NETWORK (required for Azure Files storage)
+# ============================================================
+resource "azurerm_virtual_network" "siyuan" {
+  name                = "${var.project_name}-vnet"
+  location            = azurerm_resource_group.siyuan.location
+  resource_group_name = azurerm_resource_group.siyuan.name
+  address_space       = ["10.0.0.0/16"]
+  tags                = var.tags
+}
+
+resource "azurerm_subnet" "container_apps" {
+  name                 = "container-apps-infrastructure"
+  resource_group_name  = azurerm_resource_group.siyuan.name
+  virtual_network_name = azurerm_virtual_network.siyuan.name
+  address_prefixes     = ["10.0.0.0/27"]
+
+  delegation {
+    name = "container-apps-delegation"
+
+    service_delegation {
+      name = "Microsoft.App/environments"
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+      ]
+    }
+  }
+}
+
+# ============================================================
 # CONTAINER APPS ENVIRONMENT
 # ============================================================
 resource "azurerm_container_app_environment" "siyuan" {
@@ -115,6 +144,7 @@ resource "azurerm_container_app_environment" "siyuan" {
   location                   = azurerm_resource_group.siyuan.location
   resource_group_name        = azurerm_resource_group.siyuan.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.siyuan.id
+  infrastructure_subnet_id   = azurerm_subnet.container_apps.id
 
   workload_profile {
     name                  = "Consumption"
@@ -150,12 +180,16 @@ resource "azapi_resource" "serverless_endpoint" {
   body = {
     properties = {
       authMode = "Key"
+      contentSafety = {
+        contentSafetyStatus = "Enabled"
+      }
       modelSettings = {
         modelId = var.serverless_model_id
       }
     }
     sku = {
-      name = "Standard"
+      name = var.serverless_sku_name
+      tier = "Standard"
     }
   }
 }

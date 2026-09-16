@@ -1,0 +1,16 @@
+# Replace these with your actual values
+resource_group_name  = "rg-siyuan-prod"
+location             = "swedencentral"
+project_name         = "azure-xiaoxi-siyuan"
+storage_account_name = "stsiyuanprod001" # Must be globally unique
+siyuan_auth_code     = "<YOUR_SIYUAN_AUTH_CODE>"
+timezone             = "Europe/Stockholm"
+
+# Container sizing
+container_cpu    = 0.5
+container_memory = "1Gi"
+min_replicas     = 1
+max_replicas     = 1
+
+serverless_model_id = "DeepSeek-R1"
+serverless_sku_name = "Consumption"
