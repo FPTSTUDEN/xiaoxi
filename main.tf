@@ -212,7 +212,7 @@ resource "azurerm_container_app" "siyuan" {
       name          = "siyuan-workspace"
       storage_name  = azurerm_container_app_environment_storage.siyuan.name
       storage_type  = "AzureFile"
-      mount_options = "dir_mode=0777,file_mode=0777,noperm,serverino"
+      mount_options = "dir_mode=0777,file_mode=0777,noperm,nobrl,serverino"
     }
 
     container {
