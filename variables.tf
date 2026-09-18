@@ -48,7 +48,7 @@ variable "container_memory" {
 variable "min_replicas" {
   description = "Minimum replicas (0 = scale to zero, 1 = always warm)"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "max_replicas" {
