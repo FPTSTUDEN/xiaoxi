@@ -4,6 +4,7 @@ location             = "swedencentral"
 project_name         = "azure-xiaoxi-siyuan"
 storage_account_name = "stsiyuanprod001" # Must be globally unique
 siyuan_auth_code     = "<YOUR_SIYUAN_AUTH_CODE>"
+siyuan_api_token     = "<YOUR_STABLE_API_TOKEN>"
 timezone             = "Europe/Stockholm"
 
 # Container sizing
@@ -12,9 +13,14 @@ container_memory = "1Gi"
 min_replicas     = 1
 max_replicas     = 1
 
-# Azure AI Foundry serverless endpoint variables
-# serverless_model_id = "DeepSeek-R1"
-openai_model_name = "gpt-5.6-terra"
-openai_deployment_name = "gpt-5.6-terra-deployment"
-openai_model_version = "2026-07-09"
-# serverless_sku_name = "Consumption"
+# Bootstrap
+bootstrap_enabled = true
+
+# Azure OpenAI / AI Foundry model
+openai_model_name      = "gpt-4o-mini"
+openai_deployment_name = "gpt-4o-mini-deployment"
+openai_model_version   = "2024-07-18"
+
+# Optional: override the OpenAI-compatible base URL and model for SiYuan
+# openai_api_base_url = "https://<your-endpoint>.openai.azure.com/openai/deployments/<deployment>"
+# openai_api_model    = "gpt-4o-mini"

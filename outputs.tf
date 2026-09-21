@@ -22,3 +22,21 @@ output "resource_group_name" {
   description = "Name of the resource group"
   value       = azurerm_resource_group.siyuan.name
 }
+output "siyuan_api_token_configured" {
+  description = "Indicates that an API token is being injected via bootstrap"
+  value       = var.siyuan_api_token != "" ? "yes" : "no"
+  sensitive   = true
+}
+
+output "bootstrap_enabled" {
+  description = "Whether the post-start bootstrap is enabled"
+  value       = var.bootstrap_enabled
+}
+
+output "siyuan_openai_base_url" {
+  description = "OpenAI-compatible base URL used by the SiYuan provider"
+  value = coalesce(
+    var.openai_api_base_url,
+    "${azurerm_cognitive_account.openai.endpoint}openai/deployments/${azurerm_cognitive_deployment.model.name}"
+  )
+}

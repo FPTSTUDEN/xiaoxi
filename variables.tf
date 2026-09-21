@@ -97,3 +97,32 @@ variable "tags" {
     ManagedBy   = "terraform"
   }
 }
+variable "siyuan_api_token" {
+  description = "SiYuan API token for programmatic access (generate a stable value)"
+  type        = string
+  sensitive   = true
+}
+
+variable "siyuan_workspace_path" {
+  description = "Workspace path inside the container"
+  type        = string
+  default     = "/siyuan/workspace/"
+}
+
+variable "bootstrap_enabled" {
+  description = "Enable post-start bootstrap script for AI provider and API token"
+  type        = bool
+  default     = true
+}
+
+variable "openai_api_base_url" {
+  description = "OpenAI-compatible API base URL (defaults to Azure OpenAI endpoint)"
+  type        = string
+  default     = ""
+}
+
+variable "openai_api_model" {
+  description = "Model name for SiYuan provider config"
+  type        = string
+  default     = ""
+}

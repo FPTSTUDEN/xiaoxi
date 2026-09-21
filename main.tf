@@ -180,7 +180,7 @@ resource "azurerm_container_app" "siyuan" {
   resource_group_name          = azurerm_resource_group.siyuan.name
   revision_mode                = "Single"
 
-  # Secrets for auth code and OpenAI key [citation:5]
+  # Secrets for auth code, OpenAI key, and API token [citation:5]
   secret {
     name  = "siyuan-auth-code"
     value = var.siyuan_auth_code
@@ -189,6 +189,11 @@ resource "azurerm_container_app" "siyuan" {
   secret {
     name  = "azure-openai-key"
     value = azurerm_cognitive_account.openai.primary_access_key
+  }
+
+  secret {
+    name  = "siyuan-api-token"
+    value = var.siyuan_api_token
   }
 
   # Ingress configuration
@@ -222,7 +227,7 @@ resource "azurerm_container_app" "siyuan" {
       memory = var.container_memory
 
       # The image entrypoint invokes the kernel, so pass its command and flags.
-      args    = ["serve", "--workspace=/siyuan/workspace/"]
+      args = ["serve", "--workspace=${var.siyuan_workspace_path}"]
 
       # Volume mount
       volume_mounts {
@@ -247,11 +252,16 @@ resource "azurerm_container_app" "siyuan" {
       }
 
       env {
+        name        = "SIYUAN_API_TOKEN"
+        secret_name = "siyuan-api-token"
+      }
+
+      env {
         name  = "TZ"
         value = var.timezone
       }
 
-      # AI configuration (for reference in SiYuan settings)
+      # --- Azure OpenAI backend values (used by bootstrap script) ---
       env {
         name  = "AZURE_OPENAI_ENDPOINT"
         value = azurerm_cognitive_account.openai.endpoint
@@ -270,6 +280,88 @@ resource "azurerm_container_app" "siyuan" {
       env {
         name  = "AZURE_OPENAI_MODEL"
         value = var.openai_model_name
+      }
+
+      # --- SiYuan OpenAI-compatible provider bootstrap vars ---
+      # These allow SiYuan to initialize provider config on first boot.
+      env {
+        name  = "SIYUAN_OPENAI_API_KEY"
+        value = azurerm_cognitive_account.openai.primary_access_key
+      }
+
+      env {
+        name  = "SIYUAN_OPENAI_API_MODEL"
+        value = coalesce(var.openai_api_model, var.openai_model_name)
+      }
+
+      env {
+        name  = "SIYUAN_OPENAI_API_BASE_URL"
+        value = coalesce(
+          var.openai_api_base_url,
+          "${azurerm_cognitive_account.openai.endpoint}openai/deployments/${azurerm_cognitive_deployment.model.name}"
+        )
+      }
+
+      # Bootstrap control
+      env {
+        name  = "BOOTSTRAP_ENABLED"
+        value = var.bootstrap_enabled ? "true" : "false"
+      }
+
+      # Ensure the API token is available to the bootstrap script
+      env {
+        name  = "SIYUAN_BOOTSTRAP_API_TOKEN"
+        secret_name = "siyuan-api-token"
+      }
+    }
+    container {
+      name   = "siyuan-bootstrap"
+      image  = "alpine:3.20"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      command = ["/bin/sh", "-c"]
+      args = [
+        "apk add --no-cache curl >/dev/null 2>&1 && sh /bootstrap/bootstrap.sh"
+      ]
+
+      # Mount the workspace volume (optional; keeps sidecar in same network)
+      volume_mounts {
+        name = "siyuan-workspace"
+        path = "/siyuan/workspace"
+      }
+
+      env {
+        name  = "SIYUAN_ACCESS_AUTH_CODE"
+        value = var.siyuan_auth_code
+      }
+
+      env {
+        name  = "SIYUAN_API_TOKEN"
+        value = var.siyuan_api_token
+      }
+
+      env {
+        name  = "SIYUAN_OPENAI_API_KEY"
+        value = azurerm_cognitive_account.openai.primary_access_key
+      }
+
+      env {
+        name  = "SIYUAN_OPENAI_API_MODEL"
+        value = coalesce(var.openai_api_model, var.openai_model_name)
+      }
+
+      env {
+        name  = "SIYUAN_OPENAI_API_BASE_URL"
+        value = coalesce(
+          var.openai_api_base_url,
+          "${azurerm_cognitive_account.openai.endpoint}openai/deployments/${azurerm_cognitive_deployment.model.name}"
+        )
+      }
+
+      env {
+        name  = "BOOTSTRAP_ENABLED"
+        value = var.bootstrap_enabled ? "true" : "false"
       }
     }
   }
