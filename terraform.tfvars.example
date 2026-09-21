@@ -12,5 +12,9 @@ container_memory = "1Gi"
 min_replicas     = 1
 max_replicas     = 1
 
-serverless_model_id = "DeepSeek-R1"
-serverless_sku_name = "Consumption"
+# Azure AI Foundry serverless endpoint variables
+# serverless_model_id = "DeepSeek-R1"
+openai_model_name = "gpt-5.6-terra"
+openai_deployment_name = "gpt-5.6-terra-deployment"
+openai_model_version = "2026-07-09"
+# serverless_sku_name = "Consumption"
