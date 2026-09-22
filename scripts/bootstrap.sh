@@ -6,8 +6,9 @@ CONF_FILE="/siyuan-conf/conf.json"
 OPENAI_ENDPOINT="${AZURE_OPENAI_ENDPOINT}"
 OPENAI_KEY="${AZURE_OPENAI_API_KEY}"
 OPENAI_DEPLOYMENT="${AZURE_OPENAI_DEPLOYMENT}"
+OPENAI_BASE_URL="${OPENAI_ENDPOINT%/}/openai/v1"
 
-echo "=== SiYuan Bootstrap Job Started ==="
+echo "=== SiYuan Bootstrap Setup Job Started ==="
 echo "Waiting for SiYuan at ${SIYUAN_URL}..."
 
 # 1. Wait for readiness
@@ -52,33 +53,51 @@ fi
 
 echo "API Token retrieved successfully."
 
-# 3. Configure AI provider using the extracted token
+# 3. Configure AI provider using the current SiYuan settings schema
 echo "Configuring AI provider..."
-AI_CONFIG=$(cat <<JSONEOF
-{
-  "Provider": "OpenAI",
-  "OpenAI": {
-    "APIKey": "${OPENAI_KEY}",
-    "APIModel": "${OPENAI_DEPLOYMENT}",
-    "APIBaseURL": "${OPENAI_ENDPOINT}",
-    "APITimeout": 60,
-    "APIMaxTokens": 4096,
-    "APITemperature": 1.0,
-    "APIMaxContexts": 7
-  }
-}
-JSONEOF
-)
+AI_CONFIG=$(jq -n \
+  --arg api_key "${OPENAI_KEY}" \
+  --arg base_url "${OPENAI_BASE_URL}" \
+  --arg model "${OPENAI_DEPLOYMENT}" \
+  '{
+    k: "ai",
+    v: {
+      providers: [{
+        enabled: true,
+        apiKey: $api_key,
+        baseURL: $base_url,
+        requestTimeout: 120,
+        models: [{
+          enabled: true,
+          name: $model,
+          displayName: $model
+        }]
+      }],
+      editing: {
+        maxHistoryMessages: 7,
+        temperature: 1.0,
+        maxCompletionTokens: 4096
+      },
+      agent: {
+        temperature: 1.0,
+        maxCompletionTokens: 4096
+      }
+    }
+  }')
 
-AI_RESPONSE=$(curl -s -X POST "${SIYUAN_URL}/api/setting/setAI" \
+AI_RESPONSE=$(curl -sS -X POST "${SIYUAN_URL}/api/setting/setAI" \
   -H "Authorization: Token ${API_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "${AI_CONFIG}")
 
 if echo "${AI_RESPONSE}" | grep -q '"code":0'; then
   echo "AI provider configured successfully."
+  # log AI response with sensitive info fields removed
+  SAFE_AI_RESPONSE=$(echo "${AI_RESPONSE}" | jq 'del(.data.providers[].apiKey)')
+  echo "AI Response: ${SAFE_AI_RESPONSE}"
 else
-  echo "Warning: Failed to set AI config: ${AI_RESPONSE}"
+  echo "Error: Failed to set AI config: ${AI_RESPONSE}"
+  exit 1
 fi
 
 echo "=== Bootstrap Job Completed ==="
