@@ -217,7 +217,7 @@ resource "azurerm_container_app" "siyuan" {
 
     container {
       name   = "siyuan"
-      image  = "b3log/siyuan:latest"
+      image  = "b3log/siyuan:v3.8.5"
       cpu    = var.container_cpu
       memory = var.container_memory
 
