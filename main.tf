@@ -281,3 +281,79 @@ resource "azurerm_container_app" "siyuan" {
     azurerm_cognitive_deployment.model
   ]
 }
+resource "azurerm_container_app_job" "bootstrap" {
+  name                         = "${var.project_name}-setup"
+  container_app_environment_id = azurerm_container_app_environment.siyuan.id
+  resource_group_name          = azurerm_resource_group.siyuan.name
+  location                     = azurerm_resource_group.siyuan.location
+  
+  manual_trigger_config {
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  replica_timeout_in_seconds = 600
+  replica_retry_limit        = 3
+
+  secret {
+    name  = "siyuan-auth-code"
+    value = var.siyuan_auth_code
+  }
+
+  secret {
+    name  = "azure-openai-key"
+    value = azurerm_cognitive_account.openai.primary_access_key
+  }
+
+  template {
+    container {
+      name   = "bootstrap"
+      image  = "alpine:3.24"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      command = ["/bin/sh", "-c"]
+      args = [
+        "apk add --no-cache curl ca-certificates && exec /bin/sh -s",
+        file("${path.module}/scripts/bootstrap.sh")
+      ]
+
+      env {
+        name        = "SIYUAN_ACCESS_AUTH_CODE"
+        secret_name = "siyuan-auth-code"
+      }
+
+      env {
+        name  = "SIYUAN_INTERNAL_URL"
+        value = "http://${azurerm_container_app.siyuan.name}"
+      }
+
+      env {
+        name  = "AZURE_OPENAI_ENDPOINT"
+        value = azurerm_cognitive_account.openai.endpoint
+      }
+
+      env {
+        name        = "AZURE_OPENAI_API_KEY"
+        secret_name = "azure-openai-key"
+      }
+
+      env {
+        name  = "AZURE_OPENAI_DEPLOYMENT"
+        value = azurerm_cognitive_deployment.model.name
+      }
+
+      env {
+        name  = "AZURE_OPENAI_MODEL"
+        value = var.openai_model_name
+      }
+    }
+  }
+
+  tags = var.tags
+
+  depends_on = [
+    azurerm_container_app.siyuan,
+    azurerm_cognitive_deployment.model
+  ]
+}
