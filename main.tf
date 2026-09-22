@@ -314,7 +314,7 @@ resource "azurerm_container_app_job" "bootstrap" {
 
       command = ["/bin/sh", "-c"]
       args = [
-        "apk add --no-cache curl ca-certificates && exec /bin/sh -s",
+        "apk add --no-cache curl ca-certificates && printf '%s\\n' \"$0\" | /bin/sh -s",
         file("${path.module}/scripts/bootstrap.sh")
       ]
 
