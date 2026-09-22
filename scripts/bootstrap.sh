@@ -2,12 +2,12 @@
 set -e
 
 SIYUAN_URL="${SIYUAN_INTERNAL_URL}"
-AUTH_CODE="${SIYUAN_ACCESS_AUTH_CODE}"
+CONF_FILE="/siyuan-conf/conf.json"
 OPENAI_ENDPOINT="${AZURE_OPENAI_ENDPOINT}"
 OPENAI_KEY="${AZURE_OPENAI_API_KEY}"
 OPENAI_DEPLOYMENT="${AZURE_OPENAI_DEPLOYMENT}"
 
-echo "=== SiYuan Setup Job Started ==="
+echo "=== SiYuan Bootstrap Job Started ==="
 echo "Waiting for SiYuan at ${SIYUAN_URL}..."
 
 # 1. Wait for readiness
@@ -26,39 +26,52 @@ for i in $(seq 1 $MAX_RETRIES); do
   fi
 done
 
-# 2. Login to get session cookie
-echo "Logging in..."
-COOKIE_JAR="/tmp/siyuan_cookies.txt"
-LOGIN_RESPONSE=$(curl -s -c "${COOKIE_JAR}" -X POST "${SIYUAN_URL}/api/system/loginAuth" \
-  -H "Content-Type: application/json" \
-  -d "{\"authCode\": \"${AUTH_CODE}\"}")
+# 2. Safely retrieve the API Token from the read-only mounted conf.json
+echo "Retrieving API Token from ${CONF_FILE}..."
 
-if echo "${LOGIN_RESPONSE}" | grep -q '"code":0'; then
-  echo "Login successful."
-else
-  echo "Login failed: ${LOGIN_RESPONSE}"
+if [ ! -f "${CONF_FILE}" ]; then
+  echo "Error: conf.json not found at ${CONF_FILE}."
+  echo "Check the volume mount subPath and that the workspace has initialized."
   exit 1
 fi
 
-# 3. Configure AI provider
+# Ensure jq is available (the alpine image needs it installed)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Installing jq..."
+  apk add --no-cache jq >/dev/null 2>&1
+fi
+
+# The API token lives under the top-level "api" key, with the actual value in "token"[citation:2][citation:12]
+API_TOKEN=$(jq -r '.api.token // empty' "${CONF_FILE}")
+
+if [ -z "${API_TOKEN}" ]; then
+  echo "Error: Could not extract 'api.token' from conf.json."
+  echo "The workspace may not have finished its first-boot initialization yet."
+  exit 1
+fi
+
+echo "API Token retrieved successfully."
+
+# 3. Configure AI provider using the extracted token
 echo "Configuring AI provider..."
 AI_CONFIG=$(cat <<JSONEOF
 {
-  "provider": "OpenAI",
-  "openAI": {
-    "apiKey": "${OPENAI_KEY}",
-    "apiModel": "${OPENAI_DEPLOYMENT}",
-    "apiBaseURL": "${OPENAI_ENDPOINT}",
-    "apiTimeout": 60,
-    "apiMaxTokens": 4096,
-    "apiTemperature": 1.0,
-    "apiMaxContexts": 7
+  "Provider": "OpenAI",
+  "OpenAI": {
+    "APIKey": "${OPENAI_KEY}",
+    "APIModel": "${OPENAI_DEPLOYMENT}",
+    "APIBaseURL": "${OPENAI_ENDPOINT}",
+    "APITimeout": 60,
+    "APIMaxTokens": 4096,
+    "APITemperature": 1.0,
+    "APIMaxContexts": 7
   }
 }
 JSONEOF
 )
 
-AI_RESPONSE=$(curl -s -b "${COOKIE_JAR}" -X POST "${SIYUAN_URL}/api/setting/setAI" \
+AI_RESPONSE=$(curl -s -X POST "${SIYUAN_URL}/api/setting/setAI" \
+  -H "Authorization: Token ${API_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "${AI_CONFIG}")
 
