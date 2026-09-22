@@ -53,7 +53,7 @@ resource "azurerm_storage_share" "siyuan_workspace" {
   storage_account_id = azurerm_storage_account.siyuan.id
   quota              = 10 # GB
 
-  access_tier = "Cool" # Cost-effective for infrequent access
+  access_tier = "Hot"
 }
 resource "azurerm_application_insights" "foundry" {
   name                = "${var.project_name}-foundry-ai"
@@ -179,7 +179,7 @@ resource "azurerm_container_app" "siyuan" {
   container_app_environment_id = azurerm_container_app_environment.siyuan.id
   resource_group_name          = azurerm_resource_group.siyuan.name
   revision_mode                = "Single"
-
+  workload_profile_name          = "Consumption"
   # Secrets for auth code and OpenAI key [citation:5]
   secret {
     name  = "siyuan-auth-code"
@@ -286,7 +286,7 @@ resource "azurerm_container_app_job" "bootstrap" {
   container_app_environment_id = azurerm_container_app_environment.siyuan.id
   resource_group_name          = azurerm_resource_group.siyuan.name
   location                     = azurerm_resource_group.siyuan.location
-  
+  workload_profile_name          = "Consumption"
   manual_trigger_config {
     parallelism              = 1
     replica_completion_count = 1
