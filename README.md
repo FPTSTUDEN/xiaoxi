@@ -1,10 +1,8 @@
 # Xiaoxi: SiYuan on Azure Container Apps
 
-This Terraform project deploys a persistent [SiYuan](https://b3log.org/siyuan/en/) instance on Azure Container Apps and configures its AI provider with an Azure OpenAI deployment.
+This repository deploys [SiYuan](https://github.com/siyuan-note/siyuan) - a privacy-first, self-hosted note-taking app - onto Azure Container Apps, wires it up to Azure OpenAI, and uses a small bootstrap job to configure the AI backend automatically. 
 
-Take notes. Own your data. Let an AI help you think.
-
-This repository deploys [SiYuan](https://github.com/siyuan-note/siyuan) — a privacy-first, self-hosted note-taking app — onto Azure Container Apps, wires it up to Azure OpenAI, and uses a small bootstrap job to configure the AI backend automatically. Your notes live in Azure Files, so they survive every restart, redeploy, and coffee spill.
+Your notes live in Azure Files, so they survive **every restart, redeploy, and coffee spill**.
 
 ## What you get
 
