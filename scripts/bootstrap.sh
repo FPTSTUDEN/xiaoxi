@@ -60,28 +60,26 @@ AI_CONFIG=$(jq -n \
   --arg base_url "${OPENAI_BASE_URL}" \
   --arg model "${OPENAI_DEPLOYMENT}" \
   '{
-    k: "ai",
-    v: {
-      providers: [{
+    providers: [{
+      enabled: true,
+      apiKey: $api_key,
+      baseURL: $base_url,
+      protocol: "openai",
+      requestTimeout: 120,
+      models: [{
         enabled: true,
-        apiKey: $api_key,
-        baseURL: $base_url,
-        requestTimeout: 120,
-        models: [{
-          enabled: true,
-          name: $model,
-          displayName: $model
-        }]
-      }],
-      editing: {
-        maxHistoryMessages: 7,
-        temperature: 1.0,
-        maxCompletionTokens: 4096
-      },
-      agent: {
-        temperature: 1.0,
-        maxCompletionTokens: 4096
-      }
+        name: $model,
+        displayName: $model
+      }]
+    }],
+    editing: {
+      maxHistoryMessages: 7,
+      temperature: 1.0,
+      maxCompletionTokens: 4096
+    },
+    agent: {
+      temperature: 1.0,
+      maxCompletionTokens: 4096
     }
   }')
 
@@ -91,7 +89,12 @@ AI_RESPONSE=$(curl -sS -X POST "${SIYUAN_URL}/api/setting/setAI" \
   -d "${AI_CONFIG}")
 
 if echo "${AI_RESPONSE}" | grep -q '"code":0'; then
-  echo "AI provider configured successfully."
+  PROVIDER_COUNT=$(echo "${AI_RESPONSE}" | jq '.data.providers | length')
+  if [ "${PROVIDER_COUNT}" -lt 1 ]; then
+    echo "Error: SiYuan accepted the request but returned no providers: ${AI_RESPONSE}"
+    exit 1
+  fi
+  echo "AI provider configured successfully (${PROVIDER_COUNT} provider(s))."
   # log AI response with sensitive info fields removed
   SAFE_AI_RESPONSE=$(echo "${AI_RESPONSE}" | jq 'del(.data.providers[].apiKey)')
   echo "AI Response: ${SAFE_AI_RESPONSE}"
