@@ -2,7 +2,80 @@
 
 This Terraform project deploys a persistent [SiYuan](https://b3log.org/siyuan/en/) instance on Azure Container Apps and configures its AI provider with an Azure OpenAI deployment.
 
-## What is deployed
+Take notes. Own your data. Let an AI help you think.
+
+This repository deploys [SiYuan](https://github.com/siyuan-note/siyuan) — a privacy-first, self-hosted note-taking app — onto Azure Container Apps, wires it up to Azure OpenAI, and uses a small bootstrap job to configure the AI backend automatically. Your notes live in Azure Files, so they survive every restart, redeploy, and coffee spill.
+
+## What you get
+
+- **A private SiYuan instance** behind a lock-screen password, reachable over HTTPS
+- **Persistent workspace storage** on Azure Files — your notes are not trapped inside a container
+- **Azure OpenAI integration** for writing assistance, editing, and agent workflows
+- **Hands-off AI configuration** via a one-shot Container App Job
+- **A single `terraform apply`** for the whole stack
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    You([🧑 You]) -->|HTTPS| App
+
+    subgraph Azure["☁️ Azure Resource Group"]
+        direction TB
+
+        subgraph Env["📦 Container Apps Environment"]
+            direction LR
+            App["📝 SiYuan App<br/><i>port 6806</i>"]
+            Job["⚙️ Bootstrap Job<br/><i>alpine + curl + jq</i>"]
+        end
+
+        Files[("🗂️ Azure Files<br/>siyuan-workspace")]
+        OpenAI["🤖 Azure OpenAI<br/>deployment"]
+
+        App -->|reads/writes| Files
+        Job -->|reads conf.json<br/>read-only| Files
+        Job -->|setAI API| App
+        App -->|chat completions| OpenAI
+    end
+
+    style You fill:#e8f4ff,stroke:#3b82f6
+    style App fill:#fff4e6,stroke:#f59e0b
+    style Job fill:#ecfdf5,stroke:#10b981
+    style Files fill:#f3e8ff,stroke:#a855f7
+    style OpenAI fill:#fef2f2,stroke:#ef4444
+```
+## Table of contents
+
+- [Xiaoxi: SiYuan on Azure Container Apps](#xiaoxi-siyuan-on-azure-container-apps)
+  - [What you get](#what-you-get)
+  - [How it fits together](#how-it-fits-together)
+  - [Table of contents](#table-of-contents)
+  - [Technical details](#technical-details)
+  - [Our learned lessons](#our-learned-lessons)
+    - [1. The SiYuan image already knows how to start itself](#1-the-siyuan-image-already-knows-how-to-start-itself)
+    - [2. Keep the access code in the environment](#2-keep-the-access-code-in-the-environment)
+    - [3. Mount the `conf` subpath, not the whole workspace](#3-mount-the-conf-subpath-not-the-whole-workspace)
+    - [4. Use the API token from `conf.json`](#4-use-the-api-token-from-confjson)
+    - [5. The small `printf` wrapper is doing important work](#5-the-small-printf-wrapper-is-doing-important-work)
+    - [6. Azure Files needs both the network and the mount options](#6-azure-files-needs-both-the-network-and-the-mount-options)
+    - [7. SiYuan's AI payload is version-sensitive](#7-siyuans-ai-payload-is-version-sensitive)
+    - [8. “Success” still needs a sanity check](#8-success-still-needs-a-sanity-check)
+    - [9. Pin the image while you learn its behavior](#9-pin-the-image-while-you-learn-its-behavior)
+    - [10. Applying Terraform does not run the job](#10-applying-terraform-does-not-run-the-job)
+    - [11. Keep the workload profile names aligned](#11-keep-the-workload-profile-names-aligned)
+    - [12. Azure OpenAI availability is more specific than it looks](#12-azure-openai-availability-is-more-specific-than-it-looks)
+  - [Prerequisites](#prerequisites)
+  - [Configuration](#configuration)
+  - [Deploy](#deploy)
+  - [Run the AI bootstrap job](#run-the-ai-bootstrap-job)
+  - [Troubleshooting](#troubleshooting)
+    - [The bootstrap job cannot reach SiYuan](#the-bootstrap-job-cannot-reach-siyuan)
+    - [`conf.json` or `api.token` is missing](#confjson-or-apitoken-is-missing)
+    - [The Azure OpenAI deployment fails](#the-azure-openai-deployment-fails)
+  - [Security and operational notes](#security-and-operational-notes)
+  - [Destroy the deployment](#destroy-the-deployment)
+
+## Technical details
 
 `main.tf` creates the following resources in the configured resource group:
 
@@ -15,11 +88,11 @@ This Terraform project deploys a persistent [SiYuan](https://b3log.org/siyuan/en
 
 The bootstrap job waits for SiYuan to become ready, reads the API token from the mounted workspace configuration, and calls SiYuan's AI settings API. The configuration uses the Azure OpenAI-compatible `/openai/v1` endpoint.
 
-## Gotchas
+## Our learned lessons
 
-This section records the issues that have already caused deployment or bootstrap failures. Check it before changing the container command, volume mounts, or AI payload.
+These are the things that surprised us while getting the deployment working. We are writing them down so the next person can skip the same debugging cycles—especially before changing the container command, volume mounts, or AI payload.
 
-### 1. Do not replace the SiYuan image entrypoint with `command = ["serve"]`
+### 1. The SiYuan image already knows how to start itself
 
 The `b3log/siyuan:v3.8.5` image entrypoint invokes the SiYuan kernel. The Terraform configuration therefore passes the kernel arguments with:
 
@@ -27,13 +100,13 @@ The `b3log/siyuan:v3.8.5` image entrypoint invokes the SiYuan kernel. The Terraf
 args = ["serve", "--workspace=/siyuan/workspace/"]
 ```
 
-Do not add a separate `command` unless you have verified the entrypoint behavior of the new image. Replacing the entrypoint can cause the container to start incorrectly or not start at all.
+Our first instinct was to replace the entrypoint with `command = ["serve"]`. That did not work reliably because the `b3log/siyuan:v3.8.5` entrypoint already invokes the SiYuan kernel. We now pass the kernel arguments with `args` and leave the entrypoint alone. If you upgrade the image, check its entrypoint before changing this.
 
-### 2. Pass the access code through the environment, not the command line
+### 2. Keep the access code in the environment
 
-SiYuan receives the access code through the `SIYUAN_ACCESS_AUTH_CODE` secret environment variable. It is intentionally not included in the container arguments. Command-line handling changed with the SiYuan image version and can expose the secret in deployment metadata or process listings.
+We originally experimented with putting the access code in the container arguments. The safer and more stable approach is the `SIYUAN_ACCESS_AUTH_CODE` secret environment variable. It also avoids exposing the secret in deployment metadata or process listings.
 
-### 3. The bootstrap job needs the `conf` subpath, not the whole workspace
+### 3. Mount the `conf` subpath, not the whole workspace
 
 The job mounts the Azure Files environment storage at `/siyuan-conf` with `sub_path = "conf"`, so the expected file is:
 
@@ -41,9 +114,9 @@ The job mounts the Azure Files environment storage at `/siyuan-conf` with `sub_p
 /siyuan-conf/conf.json
 ```
 
-The mount is read-only on purpose. Mounting the entire workspace, using the wrong subpath, or running the job before SiYuan's first boot has created `conf/conf.json` results in `conf.json not found` or a missing `api.token`. Wait for the app to initialize once before starting the job.
+Making this mount read-only is intentional. We learned that mounting the whole workspace, choosing the wrong subpath, or starting the job before first boot leads to `conf.json not found` or a missing `api.token`. Let the app initialize once before starting the job.
 
-### 4. Read the API token from `api.token`; do not log in with the auth code
+### 4. Use the API token from `conf.json`
 
 The current bootstrap flow extracts `.api.token` from `conf.json` and sends it as:
 
@@ -51,9 +124,9 @@ The current bootstrap flow extracts `.api.token` from `conf.json` and sends it a
 Authorization: Token <api-token>
 ```
 
-The older login-and-cookie approach is not the current implementation. If the token is empty, the workspace was probably not initialized, the mount path is wrong, or the SiYuan image changed its configuration schema.
+We initially tried logging in with the auth code and keeping a cookie. The current flow is simpler: read `.api.token` from `conf.json` and send it as an `Authorization: Token` header. If the token is empty, check initialization, the mount path, and the SiYuan image version first.
 
-### 5. The job script is injected through `$0`, so keep the `printf` wrapper
+### 5. The small `printf` wrapper is doing important work
 
 The job uses Alpine's `/bin/sh -c`, installs dependencies, and then receives the Terraform `file(...)` content as the command's `$0` argument. This is why the command is:
 
@@ -61,37 +134,37 @@ The job uses Alpine's `/bin/sh -c`, installs dependencies, and then receives the
 apk add --no-cache curl ca-certificates && printf '%s\n' "$0" | /bin/sh -s
 ```
 
-Changing this back to `exec /bin/sh -s` does not pipe the script content into the shell and causes confusing bootstrap startup failures.
+This is a slightly non-obvious detail: Terraform passes the `file(...)` content as `$0` to Alpine's `/bin/sh -c`. Changing the command back to `exec /bin/sh -s` means the script is no longer piped into the shell, which produces a confusing startup failure. Keep the wrapper as written.
 
-### 6. Azure Files requires the network and mount options in this configuration
+### 6. Azure Files needs both the network and the mount options
 
-The Container Apps environment uses the delegated `Microsoft.App/environments` subnet because Azure Files is mounted through the environment. The `nobrl` and `serverino` options on the SiYuan workspace mount are also deliberate; removing them can produce file-locking or inode-related errors. Keep the workspace mount writable and the bootstrap `conf` mount read-only.
+The delegated `Microsoft.App/environments` subnet is needed because Azure Files is mounted through the Container Apps environment. We also found that `nobrl` and `serverino` matter for the workspace mount; removing them can lead to file-locking or inode problems. The workspace should stay writable, while the bootstrap `conf` mount stays read-only.
 
-### 7. The SiYuan AI payload must match the installed SiYuan version
+### 7. SiYuan's AI payload is version-sensitive
 
 The bootstrap script uses the current provider shape: a top-level `providers` array with `apiKey`, `baseURL`, `protocol`, and nested `models`. It is not the older `Provider`/`OpenAI` or `APIKey`/`APIModel` shape. The current endpoint is `${AZURE_OPENAI_ENDPOINT}/openai/v1` (with a trailing slash safely removed before appending the path).
 
-If a request reports success but the response contains zero providers, the script fails deliberately instead of reporting a false positive. If SiYuan is upgraded, verify its settings API schema before updating this payload.
+We went through a couple of schema versions before landing on this one. If a request reports success but returns zero providers, the script fails deliberately rather than giving us a false positive. When upgrading SiYuan, check its settings API schema before changing this payload.
 
-### 8. A successful HTTP/API response is not enough
+### 8. “Success” still needs a sanity check
 
-The bootstrap job checks that SiYuan returns `"code":0`, verifies that at least one provider was returned, and removes provider API keys before logging the response. Inspect the job logs for the sanitized response when diagnosing an AI configuration issue; never add the raw response or API key to logs.
+An HTTP response by itself was not enough to tell us whether the setup worked. The job checks for `"code":0`, verifies that at least one provider came back, and removes API keys before logging the response. The sanitized response in the job logs is the useful diagnostic; never log the raw response.
 
-### 9. Pin and test the SiYuan image before upgrading
+### 9. Pin the image while you learn its behavior
 
-The deployment pins `b3log/siyuan:v3.8.5` rather than using a floating tag. Container entrypoints, auth behavior, configuration paths, and AI settings schemas are image-version-sensitive. Upgrade the image only after checking all of those assumptions and testing the bootstrap job against the new version.
+The deployment pins `b3log/siyuan:v3.8.5` instead of using a floating tag. Entrypoints, authentication, configuration paths, and AI settings can all change between image versions. Before upgrading, check those assumptions and run the bootstrap job against the new image.
 
-### 10. Container Apps jobs are manual, and the helper names are not dynamic
+### 10. Applying Terraform does not run the job
 
-`terraform apply` creates the bootstrap job but does not run it. Also, `scripts/run-job.sh` currently hard-codes `azure-xiaoxi-siyuan-setup` and `rg-siyuan-prod`. If `project_name` or `resource_group_name` changes, update the helper or use the equivalent Azure CLI commands with the generated names.
+This caught us once: `terraform apply` creates the bootstrap job, but the job is manual. Also, `scripts/run-job.sh` currently hard-codes `azure-xiaoxi-siyuan-setup` and `rg-siyuan-prod`. If you change `project_name` or `resource_group_name`, update the helper or use the equivalent Azure CLI commands with the generated names.
 
-### 11. `Consumption` must match the environment workload profile
+### 11. Keep the workload profile names aligned
 
-Both the app and job explicitly use the `Consumption` workload profile created by the environment. Removing `workload_profile_name = "Consumption"` or selecting a profile that does not exist in the environment can prevent deployment or revision creation.
+Both the app and job use the `Consumption` workload profile created by the environment. Removing `workload_profile_name = "Consumption"`, or choosing a profile that the environment does not have, can stop deployment or revision creation.
 
-### 12. Azure OpenAI model values are region- and quota-dependent
+### 12. Azure OpenAI availability is more specific than it looks
 
-The model name, version, deployment name, capacity, and `GlobalStandard` SKU are not universally valid. A Terraform configuration can validate while Azure rejects the deployment. Confirm availability and quota in the target region and subscription before applying, especially when copying values from `terraform.tfvars.example` or `models.txt`.
+The model name, version, deployment name, capacity, and `GlobalStandard` SKU all depend on the region, subscription, and available quota. Terraform can validate successfully while Azure rejects the deployment. Check availability before applying, especially when copying values from `terraform.tfvars.example` or `models.txt`.
 
 ## Prerequisites
 
