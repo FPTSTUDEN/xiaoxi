@@ -217,7 +217,7 @@ resource "azurerm_container_app" "siyuan" {
 
     container {
       name   = "siyuan"
-      image  = "b3log/siyuan:latest"
+      image  = "b3log/siyuan:v3.8.5"
       cpu    = var.container_cpu
       memory = var.container_memory
 
@@ -306,12 +306,26 @@ resource "azurerm_container_app_job" "bootstrap" {
   }
 
   template {
+    volume {
+      name         = "siyuan-conf-readonly"
+      storage_type = "AzureFile"
+      storage_name = azurerm_container_app_environment_storage.siyuan.name
+      # Optional: mount options for read-only behavior at the driver level
+      mount_options = "dir_mode=0555,file_mode=0444,ro" 
+    }
     container {
       name   = "bootstrap"
       image  = "alpine:3.24"
       cpu    = 0.25
       memory = "0.5Gi"
-
+      volume_mounts {
+        name      = "siyuan-conf-readonly"
+        # Mount path inside the container. We'll point to a file or dir.
+        path = "/siyuan-conf"
+        # CRITICAL: Use subPath to mount only the config file, not the whole workspace.
+        # Path relative to the share root. Adjust if your workspace root is different.
+        sub_path   = "conf" 
+      }
       command = ["/bin/sh", "-c"]
       args = [
         "apk add --no-cache curl ca-certificates && printf '%s\\n' \"$0\" | /bin/sh -s",
